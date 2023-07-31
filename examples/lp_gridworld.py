@@ -506,7 +506,7 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
         l1):
     # optimal policy here should be transformed into a matrix of appropiate dimesion
     opt_policy = matrix_policy(policy, n_states, n_actions)
-    print("OPT:", opt_policy.T)
+    # print("OPT:", opt_policy.T)
     # The transition policy convention is different here to the rest of the code
     # for legacy reasons; here, we reorder axes to fix this. We expect the
     # new probabilities to be of the shape (A, N, N).
@@ -519,24 +519,18 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
 
 
     # the main optimization variable R is a (S x A x S) dimensional matrix
-    R = {}
+    R_bar_bar_bar = {}
     for i in range(n_states):
-        R[i] = cp.Variable((n_actions, n_states))
+        R_bar_bar_bar[i] = cp.Variable((n_actions, n_states))
 
-    # # creating the auxiliary state-action reward variable
-    # R_bar_bar = np.empty((n_states,n_actions),dtype = object)
-    # # R_bar_bar = cp.Variable((n_states,n_actions))
-    # for s in range(n_states):
-    #     for a in range(n_actions):
-    #         v = 0
-    #         for s_to in range(n_states):
-    #             v += R[s][a][s_to]*transition_probability[a,s,s_to]
-    #         # print(v)
-    #         R_bar_bar[s][a] = v
+    # creating the auxiliary state-action reward variable
+    # R_bar_bar = np.ones((n_states,n_actions))
+    R_bar_bar = cp.Variable((n_states,n_actions))
+    
 
     # print(R_bar_bar.shape)
-
-    R_bar_bar = cp.Variable((n_states,n_actions))
+    # print(R_bar_bar)
+    # R_bar_bar = cp.Variable((n_states,n_actions))
 
     # print(R_bar_bar)
     R = cp.diag(R_bar_bar@opt_policy)
@@ -555,7 +549,13 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
             constraints += [R_bar_bar[s, policy[s]] - R_bar_bar[s,a] + \
             discount* (transition_probability[policy[s]][s] - transition_probability[a][s])@inv_matrix@R  >= 0 ]
 
-
+    for s in range(n_states):
+        for a in range(n_actions):
+            v = 0
+            for s_to in range(n_states):
+                v += R_bar_bar_bar[s][a][s_to]*transition_probability[a,s,s_to]
+            # print(v)
+            constraints += [R_bar_bar[s][a] == v]
 
     def T(a, s):
         """
@@ -598,35 +598,35 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
     prob.solve()
     print("status:", prob.status)
     print("optimal value", prob.value)
-    # x_normed = normalize(R_bar_bar.value, axis=1, norm='l1')
-    # print("R: ",np.round(x_normed,2))
-    # # print("M:", M.value)
-    # # print(cp.diag(R_bar_bar@opt_policy))
-    # actions = ['$a_0$','$a_1$','$a_2$','$a_3$']
-    # states = ['$s_{%.d}$'%(24-d) for d in range(n_states)]
-    # # print(states)
-    # fig, (ax1, ax2) = plt.subplots(figsize=(18, 7), dpi = 500,ncols=2)
-    # pos = ax1.imshow(x_normed,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
-    # ax1.set_title("Normalized Reward")
-    # fig.colorbar(pos,ax = ax1)
+    x_normed = normalize(R_bar_bar.value, axis=1, norm='l1')
+    print("R: ",np.round(x_normed,2))
+    # print("M:", M.value)
+    # print(cp.diag(R_bar_bar@opt_policy))
+    actions = ['$a_0$','$a_1$','$a_2$','$a_3$']
+    states = ['$s_{%.d}$'%(24-d) for d in range(n_states)]
+    # print(states)
+    fig, (ax1, ax2) = plt.subplots(figsize=(18, 7), dpi = 500,ncols=2)
+    pos = ax1.imshow(x_normed,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
+    ax1.set_title("Normalized Reward")
+    fig.colorbar(pos,ax = ax1)
 
-    # ax1.set_xticks(np.arange(len(actions)))
-    # ax1.set_xticklabels(labels= actions)
-    # ax1.set_yticks(np.arange(len(states)))
-    # ax1.set_yticklabels(labels= states)
+    ax1.set_xticks(np.arange(len(actions)))
+    ax1.set_xticklabels(labels= actions)
+    ax1.set_yticks(np.arange(len(states)))
+    ax1.set_yticklabels(labels= states)
 
-    # pos2 = ax2.imshow(opt_policy.T,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
-    # ax2.set_title("Optimal Policy")
-    # fig.colorbar(pos2,ax = ax2)
-    # # fig.tight_layout()
+    pos2 = ax2.imshow(opt_policy.T,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
+    ax2.set_title("Optimal Policy")
+    fig.colorbar(pos2,ax = ax2)
+    # fig.tight_layout()
 
-    # ax2.set_xticks(np.arange(len(actions)))
-    # ax2.set_xticklabels(labels= actions)
-    # ax2.set_yticks(np.arange(len(states)))
-    # ax2.set_yticklabels(labels= states)
-    # fig.suptitle("Comparison of the Recovered State-Action Rewards with the Optimal Policy", fontsize = 20)
-    # # fig.colorbar()
-    # plt.savefig("state_action_def_reward.png")
+    ax2.set_xticks(np.arange(len(actions)))
+    ax2.set_xticklabels(labels= actions)
+    ax2.set_yticks(np.arange(len(states)))
+    ax2.set_yticklabels(labels= states)
+    fig.suptitle("Comparison of the Recovered State-Action Rewards with the Optimal Policy", fontsize = 20)
+    # fig.colorbar()
+    plt.savefig("state_action_state_def_reward.png")
     # plt.show()
 
 if __name__ == '__main__':
