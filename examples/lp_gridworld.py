@@ -8,6 +8,8 @@ matthew.alger@anu.edu.au
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+
+from sklearn.preprocessing import normalize
 # print(sys.path)
 # from irl.linear_irl import irl
 
@@ -504,7 +506,7 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
         l1):
     # optimal policy here should be transformed into a matrix of appropiate dimesion
     opt_policy = matrix_policy(policy, n_states, n_actions)
-
+    print("OPT:", opt_policy.T)
     # The transition policy convention is different here to the rest of the code
     # for legacy reasons; here, we reorder axes to fix this. We expect the
     # new probabilities to be of the shape (A, N, N).
@@ -517,9 +519,9 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
 
 
     # the main optimization variable R is a (S x A x S) dimensional matrix
-    # R = {}
-    # for i in range(n_states):
-    #     R[i] = cp.Variable((n_actions, n_states))
+    R = {}
+    for i in range(n_states):
+        R[i] = cp.Variable((n_actions, n_states))
 
     # # creating the auxiliary state-action reward variable
     # R_bar_bar = np.empty((n_states,n_actions),dtype = object)
@@ -586,19 +588,46 @@ def IRL_state_action_state(n_states, n_actions, transition_probability, policy, 
     M = cp.Variable(n_states)
     
 
-    # constraints += [R <= u, R<= -u , D@cp.hstack([R,M,u]) <= 0, R <= Rmax, R>= -Rmax]
+    constraints += [R <= u, -R<= u , D@cp.hstack([R,M,u]) <= 0, R <= 2, R>= -2]
 
-    constraints += [R <= u, R<= -u , D@cp.hstack([R,M,u]) <= 0]
-    
+    # constraints += [R <= u, R<= -u, D@cp.hstack([R,M,u]) <= 0]
+
     obj = cp.Maximize(cp.sum(M- l1*u) )
 
     prob = cp.Problem(obj, constraints)
     prob.solve()
     print("status:", prob.status)
     print("optimal value", prob.value)
-    # print("R:", R_bar_bar.value)
-    # print("M:", M.value)
-    # print(cp.diag(R_bar_bar@opt_policy))
+    # x_normed = normalize(R_bar_bar.value, axis=1, norm='l1')
+    # print("R: ",np.round(x_normed,2))
+    # # print("M:", M.value)
+    # # print(cp.diag(R_bar_bar@opt_policy))
+    # actions = ['$a_0$','$a_1$','$a_2$','$a_3$']
+    # states = ['$s_{%.d}$'%(24-d) for d in range(n_states)]
+    # # print(states)
+    # fig, (ax1, ax2) = plt.subplots(figsize=(18, 7), dpi = 500,ncols=2)
+    # pos = ax1.imshow(x_normed,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
+    # ax1.set_title("Normalized Reward")
+    # fig.colorbar(pos,ax = ax1)
+
+    # ax1.set_xticks(np.arange(len(actions)))
+    # ax1.set_xticklabels(labels= actions)
+    # ax1.set_yticks(np.arange(len(states)))
+    # ax1.set_yticklabels(labels= states)
+
+    # pos2 = ax2.imshow(opt_policy.T,origin = 'upper', extent = [0,4,0,24], aspect = 1.0/5)
+    # ax2.set_title("Optimal Policy")
+    # fig.colorbar(pos2,ax = ax2)
+    # # fig.tight_layout()
+
+    # ax2.set_xticks(np.arange(len(actions)))
+    # ax2.set_xticklabels(labels= actions)
+    # ax2.set_yticks(np.arange(len(states)))
+    # ax2.set_yticklabels(labels= states)
+    # fig.suptitle("Comparison of the Recovered State-Action Rewards with the Optimal Policy", fontsize = 20)
+    # # fig.colorbar()
+    # plt.savefig("state_action_def_reward.png")
+    # plt.show()
 
 if __name__ == '__main__':
     # R is 3D array with dimensions S x A x S.
