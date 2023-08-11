@@ -309,139 +309,109 @@ class Gridworld(object):
         return np.array(trajectories)
 
 
-def irl(n_states, n_actions, transition_probability, policy, discount, Rmax,
-        l1):
-    """
-    Find a reward function with inverse RL as described in Ng & Russell, 2000.
 
-    n_states: Number of states. int.
-    n_actions: Number of actions. int.
-    transition_probability: NumPy array mapping (state_i, action, state_k) to
-        the probability of transitioning from state_i to state_k under action.
-        Shape (N, A, N).
-    policy: Vector mapping state ints to action ints. Shape (N,).
-    discount: Discount factor. float.
-    Rmax: Maximum reward. float.
-    l1: l1 regularisation. float.
-    -> Reward vector
-    """
+def binary_labeling_matrix(n_states, n_RM_states):
+     
 
-    A = set(range(n_actions))  # Set of actions to help manage reordering
-                               # actions.
-    # The transition policy convention is different here to the rest of the code
-    # for legacy reasons; here, we reorder axes to fix this. We expect the
-    # new probabilities to be of the shape (A, N, N).
-    transition_probability = np.transpose(transition_probability, (1, 0, 2))
-    opt_transition_matrix = np.zeros(shape = (n_states, n_states))
-    for i in range(n_states):
-        opt_transition_matrix[i] = transition_probability[policy[i]][i]
+    out = np.zeros((n_RM_states+1, n_states))
+    for state in range(n_states):
+        if state == 0:
+            out[0][state] = 1
+        elif state == 4:
+            out[1][state] = 1
+        elif state == 24:
+            out[2][state] = 1
+        elif state == 20:
+            out[3][state] = 1
+        else:
+            out[4][state] = 1
+    return out
 
-    print("The opt is:", opt_transition_matrix)
+# UNIT TEST FOR :::binary_labeling_matrix:::
+# print(binary_labeling_matrix(25,4))
 
-    def T(a, s):
-        """
-        Shorthand for a dot product used a lot in the LP formulation.
-        """
+def labeling_function(s_prime, n_states= 25, n_RM_states =4):
+    out = binary_labeling_matrix(n_states,n_RM_states)
+    return out.T[s_prime]
 
-        return np.dot(transition_probability[policy[s], s] -
-                      transition_probability[a, s],
-                      np.linalg.inv(np.eye(n_states) -
-                        discount*transition_probability[policy[s]]))
-
-    # This entire function just computes the block matrices used for the LP
-    # formulation of IRL.
-
-    # Minimise c . x.
-    c = -np.hstack([np.zeros(n_states), np.ones(n_states),
-                    -l1*np.ones(n_states)])
-    zero_stack1 = np.zeros((n_states*(n_actions-1), n_states))
-    T_stack = np.vstack([
-        -T(a, s)
-        for s in range(n_states)
-        for a in A - {policy[s]}
-    ])
-    I_stack1 = np.vstack([
-        np.eye(1, n_states, s)
-        for s in range(n_states)
-        for a in A - {policy[s]}
-    ])
-    I_stack2 = np.eye(n_states)
-    zero_stack2 = np.zeros((n_states, n_states))
+# UNIT TEST FOR :::labeling_function:::
+# print(labeling_function(4))
 
 
-    # D = np.hstack([T_stack,I_stack1,zero_stack1])
 
 
-    D_left = np.vstack([T_stack, T_stack, -I_stack2, I_stack2])
-    D_middle = np.vstack([I_stack1, zero_stack1, zero_stack2, zero_stack2])
-    D_right = np.vstack([zero_stack1, zero_stack1, -I_stack2, -I_stack2])
-
-    D = np.hstack([D_left, D_middle, D_right])
-    b = np.zeros((n_states*(n_actions-1)*2 + 2*n_states, 1))
-    bounds = np.array([(None, None)]*2*n_states + [(-Rmax, Rmax)]*n_states)
-
-    # We still need to bound R. To do this, we just add
-    # -I R <= Rmax 1
-    # I R <= Rmax 1
-    # So to D we need to add -I and I, and to b we need to add Rmax 1 and Rmax 1
-    D_bounds = np.hstack([
-        np.vstack([
-            -np.eye(n_states),
-            np.eye(n_states)]),
-        np.vstack([
-            np.zeros((n_states, n_states)),
-            np.zeros((n_states, n_states))]),
-        np.vstack([
-            np.zeros((n_states, n_states)),
-            np.zeros((n_states, n_states))])])
-    b_bounds = np.vstack([Rmax*np.ones((n_states, 1))]*2)
-    D = np.vstack((D, D_bounds))
-    b = np.vstack((b, b_bounds))
-    A_ub = matrix(D)
-    b = matrix(b)
-    c = matrix(c)
-    results = solvers.lp(c, A_ub, b)
-    r = np.asarray(results["x"][:n_states], dtype=np.double)
-
-    return r.reshape((n_states,))
-
-
-def labeling_function(s_prime):
-    # this is the labeling function
-    if s_prime == 0:
-        return "A True"
-    elif s_prime == 4:
-        return "B True"
-    elif s_prime == 24:
-        return "C True"
-    elif s_prime == 20:
-        return "D True"
-    else:
-        return "None True"
-    
-   
 def delta_u(u, s_prime):
 
     l = labeling_function(s_prime)
 
-    if u == 0 and l == "None True":
+    if u == 0 and l[0] == 0:
         return 0 # i.e u_0
-    elif u == 0 and l == "A True":
+    elif u == 0 and l[0] == 1:
         return 1 # i.e u_1 
-    elif u == 1 and l == "None True":
+    elif u == 1 and l[1] == 0:
         return 1 # i.e. u_1
-    elif u == 1 and l == "B True":
+    elif u == 1 and l[1] == 1:
         return 2 # i.e. u_2
-    elif u == 2 and l == "None True":
+    elif u == 2 and l[2] == 0 :
         return 2 # i.e. u_2
-    elif u == 2 and l == "C True":
+    elif u == 2 and l[2] == 1:
         return 3 # i.e. u_3
-    elif u == 3 and l == " None True":
+    elif u == 3 and l[3] == 0:
         return 3 # i.e. u_3
-    elif u == 3 and l == "D True":
+    elif u == 3 and l[3] == 1:
         return 0 # i.e. u_0
 
+# UNIT TEST FOR :::delta_u:::
+# print(delta_u(0,1))
 
+
+def get_su(state , n_states = 25):
+    if state <= 24:
+        return (state%n_states, 0 )
+    elif state >= 25 and state <= 49:
+        return (state%n_states, 1 )
+    elif state >= 50 and state <= 74:
+        return (state%n_states, 2 )
+    else:
+        return (state%n_states, 3 )
+    
+
+# UNIT TEST FOR :::get_u:::
+# print("YOY:", get_u(28))
+
+
+def product_transition_matrix(n_mdp_states = 25, n_rm_states = 4,n_actions = 4, transition_probability = None):
+    
+    new_state_dim = n_mdp_states*n_rm_states
+
+    P = np.zeros((n_actions, new_state_dim, new_state_dim ))
+
+    transition_probability = np.transpose(transition_probability, (1, 0, 2))
+
+    for i in range(n_actions):
+        for starting_state in range(new_state_dim):
+            for end_state in range(new_state_dim):
+                mdp_state_start, rm_state_start = get_su(starting_state)
+                mdp_state_end, rm_state_end = get_su(end_state)
+
+                if rm_state_end == delta_u(rm_state_start, mdp_state_end):
+                    P[i][starting_state][end_state] = transition_probability[i][mdp_state_start][mdp_state_end]
+    
+    assert abs(P[0].sum(axis = 1).sum() - new_state_dim) <= 1e-4
+    assert abs(P[1].sum(axis = 1).sum() - new_state_dim) <= 1e-4
+    assert abs(P[2].sum(axis = 1).sum() - new_state_dim) <= 1e-4
+    assert abs(P[3].sum(axis = 1).sum() - new_state_dim) <= 1e-4
+
+    # print(P[1].sum(axis = 1))
+
+
+# def optimal_policy_rm(product_state, gw, n_mdp_states = 25, n_rm_states = 4,n_actions = 4):
+#     s,u = product_state
+
+#     sx, sy = gw.int_to_point(s)
+    
+#     if u == 0:
+#         if 
 
 
 
@@ -464,6 +434,10 @@ def main(grid_size, discount):
 
     ground_r = np.array([gw.reward(s) for s in range(gw.n_states)])
     policy = [gw.optimal_policy_deterministic(s) for s in range(gw.n_states)]
+
+    
+
+
     # print(policy)
     # print(matrix_policy(policy, gw.n_states, gw.n_actions))
     # r = linear_irl.irl(gw.n_states, gw.n_actions, gw.transition_probability,
@@ -471,9 +445,10 @@ def main(grid_size, discount):
     # r = irl(gw.n_states, gw.n_actions, gw.transition_probability,
     #         policy, gw.discount, 1, 5)
 
+    
 
-    r = IRL_state_action_state(gw.n_states, gw.n_actions, gw.transition_probability,
-            policy, gw.discount, 1, 5)
+    # r = IRL_state_action_state(gw.n_states, gw.n_actions, gw.transition_probability,
+    #         policy, gw.discount, 1, 5)
 
     # plt.subplot(1, 2, 1)
     # plt.pcolor(ground_r.reshape((grid_size, grid_size)))
@@ -487,7 +462,7 @@ def main(grid_size, discount):
     # plt.savefig("mygraph.png")
     # print("learned r: ", r/np.linalg.norm(r) )
     # print("trueeee r: ", ground_r)
-    # print(gw.int_to_point(24))
+    print(gw.int_to_point(5))
 
 
 def matrix_policy(policy, n_states, n_actions):
